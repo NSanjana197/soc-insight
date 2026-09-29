@@ -1,104 +1,274 @@
-# SOC-Insight — Backend
+# SOC-Insight
 
-A working backend for the SOC Investigation and Automated Incident Reporting
-Platform: ingest auth logs → normalize → detect → correlate → incident →
-PDF report. No frontend yet — this is the engine, exposed as a REST API
-with interactive docs.
+**SOC Investigation and Automated Incident Reporting Platform**
 
-## 1. Setup
+SOC-Insight ingests authentication/security logs, detects suspicious
+patterns with rule-based detectors, correlates related events into a single
+incident instead of a pile of disconnected alerts, and generates a
+structured PDF incident report — the pipeline a SOC analyst would otherwise
+do by hand.
 
-```bash
-cd soc-insight
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+```
+Log Collection → Normalization → Detection → Correlation → Investigation → Reporting
 ```
 
-## 2. Run
+A live dashboard (React) sits on top of the API for browsing incidents,
+inspecting timelines, and downloading reports.
+
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)
+![React](https://img.shields.io/badge/React-18-61DAFB)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+  - [Backend](#1-backend-setup)
+  - [Frontend](#2-frontend-setup)
+- [Try It: Sample Attack Scenario](#try-it-sample-attack-scenario)
+- [Detection Rules](#detection-rules)
+- [Incident Severity](#incident-severity)
+- [API Reference](#api-reference)
+- [Feeding It Real Logs](#feeding-it-real-logs)
+- [Switching to PostgreSQL](#switching-to-postgresql)
+- [Roadmap](#roadmap)
+- [Limitations](#limitations)
+- [License](#license)
+
+---
+
+## Overview
+
+Security tools generate more log data than any analyst can read line by
+line. A single brute-force attack can produce dozens of individual log
+entries — failed logins, a successful login, a privileged command, a file
+access — that mean nothing in isolation but tell a clear story together.
+
+SOC-Insight's job is to turn that pile of raw logs into that story:
+
+1. **Normalize** logs from different sources into one common event format.
+2. **Detect** suspicious patterns with a documented set of rules (not a
+   black box — every alert traces back to specific rule and evidence).
+3. **Correlate** related alerts for the same account/IP into a single
+   incident, so an analyst investigates one story instead of ten alerts.
+4. **Classify severity** using explicit rules (Critical/High/Medium/Low),
+   not a single "everything unusual is an attack" heuristic.
+5. **Report** — generate a structured, timeline-based PDF incident report
+   ready to hand off or file.
+
+## Features
+
+- Rule-based detection: brute force, repeated failures, success-after-
+  failures, unusual login hours, privilege escalation, sensitive resource
+  access
+- Event correlation that merges related alerts into one incident and keeps
+  extending it as new related logs arrive (rather than duplicating)
+- Explicit severity classification matching a documented rules table
+- Full investigation timeline per incident
+- One-click PDF incident report generation (ReportLab)
+- REST API with interactive OpenAPI docs (`/docs`)
+- React dashboard: severity overview, incidents table, top offending
+  IPs/accounts, incident detail panel with status control and report
+  download
+- Built-in attack-scenario simulator (`POST /simulate`) for demos and
+  testing without a real log source connected
+
+## Architecture
+
+```
+                  SECURITY LOG SOURCES
+                         │
+          ┌──────────────┼──────────────┐
+          ↓              ↓              ↓
+       Linux          Windows        Application
+       Logs            Logs             Logs
+          │              │              │
+          └──────────────┼──────────────┘
+                         ↓
+                  LOG NORMALIZER
+                         ↓
+                DETECTION ENGINE
+                         ↓
+                CORRELATION ENGINE
+                         ↓
+              ┌──────────┴──────────┐
+              ↓                     ↓
+       ALERT GENERATION       INCIDENT CREATION
+              │                     │
+              └──────────┬──────────┘
+                         ↓
+                  SOC DASHBOARD
+                         ↓
+              INVESTIGATION TIMELINE
+                         ↓
+              PDF INCIDENT REPORT
+```
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend API | Python, FastAPI |
+| ORM / Database | SQLAlchemy, SQLite (swap to PostgreSQL with one env var) |
+| Validation | Pydantic |
+| PDF Reports | ReportLab |
+| Frontend | React 18, Vite |
+| Icons | lucide-react |
+
+## Project Structure
+
+```
+soc-insight/
+├── app/                          Backend (FastAPI)
+│   ├── main.py                    App entrypoint, /simulate demo endpoint
+│   ├── database.py                 SQLAlchemy engine/session
+│   ├── models.py                    LogEvent / Alert / Incident / Timeline
+│   ├── schemas.py                    Pydantic request/response models
+│   ├── normalizer.py                 Raw log text -> structured events
+│   ├── detection.py                   Rule-based detectors
+│   ├── correlation.py                  Groups alerts into incidents
+│   ├── severity.py                      Severity + recommended actions
+│   ├── report_generator.py               PDF incident report
+│   ├── sample_data.py                     Example attack scenario generator
+│   ├── pipeline.py                         Wires it all together
+│   └── routers/
+│       ├── logs.py, alerts.py, incidents.py, dashboard.py
+├── frontend/                     Dashboard (React + Vite)
+│   └── src/
+│       ├── App.jsx, api.js, styles.css
+│       └── components/
+├── requirements.txt
+└── README.md
+```
+
+## Getting Started
+
+### 1. Backend Setup
 
 ```bash
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Then open **http://127.0.0.1:8000/docs** — full interactive Swagger UI for
-every endpoint below.
+- API: http://127.0.0.1:8000
+- Interactive docs: http://127.0.0.1:8000/docs
 
-A SQLite file `soc_insight.db` is created automatically on first run. Delete
-it any time to reset all data.
+A SQLite file `soc_insight.db` is created automatically on first run.
+Delete it anytime to reset all data.
 
-## 3. Try it in 30 seconds
+### 2. Frontend Setup
+
+With the backend already running:
 
 ```bash
-# Load the example attack scenario from the project proposal
-# (brute force -> successful login -> sudo -> sensitive file access)
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173.
+
+By default the dashboard talks to `http://127.0.0.1:8000`. To point it
+elsewhere, create `frontend/.env`:
+
+```
+VITE_API_URL=http://your-backend-host:8000
+```
+
+## Try It: Sample Attack Scenario
+
+No real log source needed to see the whole pipeline work — `/simulate`
+replays a scripted attack (brute force → successful login → privilege
+escalation → sensitive file access) plus some harmless background traffic:
+
+```bash
 curl -X POST http://127.0.0.1:8000/simulate
-
-# See the dashboard summary
-curl http://127.0.0.1:8000/dashboard/summary
-
-# List the incident(s) that got created
 curl http://127.0.0.1:8000/incidents/
-
-# Download the PDF report for incident 1
 curl http://127.0.0.1:8000/incidents/1/report.pdf -o incident_1.pdf
 ```
 
-You should see one `CRITICAL` `ACCOUNT_COMPROMISE` incident, with a full
-timeline from the first failed login through the sensitive file access.
+Or click **Run Simulation** in the dashboard. Expect one `CRITICAL`
+`ACCOUNT_COMPROMISE` incident with a full timeline from the first failed
+login through the sensitive file access.
 
-## 4. Feeding it real logs
-
-Two ingestion endpoints:
-
-- `POST /logs/ingest/raw` — paste raw syslog-style lines (e.g. copied from
-  `/var/log/auth.log`). Body: `{"lines": [...], "service": "SSH"}`.
-  Currently understands SSH failed/accepted logins, `sudo` privilege
-  escalation, and a generic "accessed <sensitive-path>" pattern. Add more
-  patterns in `app/normalizer.py`.
-- `POST /logs/ingest/structured` — already-structured JSON events, for
-  sources that can emit JSON directly (e.g. an application's own auth
-  logging). See `LogEventIn` in `app/schemas.py` for the shape.
-
-## 5. Project layout
-
-```
-app/
-  main.py            FastAPI app, startup, /simulate demo endpoint
-  database.py         SQLAlchemy engine/session (SQLite by default)
-  models.py            LogEvent / Alert / Incident / IncidentTimelineEvent
-  schemas.py           Pydantic request/response models
-  normalizer.py        Raw log text -> structured event dicts
-  detection.py         Rule-based detectors (brute force, privilege
-                        escalation, unusual login time, etc.)
-  correlation.py        Groups related alerts into incidents + builds
-                        timelines
-  severity.py           Incident type/severity classification rules
-  report_generator.py   PDF incident report (reportlab)
-  sample_data.py         Generates the example attack scenario for demos
-  pipeline.py            Wires it all together (used by every ingest route)
-  routers/
-    logs.py, alerts.py, incidents.py, dashboard.py
-```
-
-## 6. Detection rules currently implemented
+## Detection Rules
 
 | Rule | Trigger | Severity |
 |---|---|---|
-| Brute force | 10+ failed logins, same user+IP, within 5 min | HIGH |
-| Repeated failures | 5-9 failed logins, same user+IP | MEDIUM |
-| Success after failures | Login succeeds within 5 min of 3+ failures | HIGH |
-| Unusual login time | Successful login outside 06:00-22:00 | MEDIUM |
-| Privilege escalation | `sudo`/privileged command within 15 min of login | HIGH |
+| Brute force | 10+ failed logins, same user + IP, within 5 minutes | HIGH |
+| Repeated failures | 5–9 failed logins, same user + IP | MEDIUM |
+| Success after failures | Login succeeds within 5 min of 3+ prior failures | HIGH |
+| Unusual login time | Successful login outside 06:00–22:00 | MEDIUM |
+| Privilege escalation | Privileged command within 15 min of a login | HIGH |
 | Sensitive resource access | Sensitive path accessed within 15 min of a privilege escalation | CRITICAL |
 
-The correlation engine then groups related findings for the same
-user+IP into one incident and assigns an overall severity (see
-`app/severity.py` for the exact rules — this mirrors the
-Critical/High/Medium/Low table in the project proposal).
+Thresholds are tunable constants in `app/detection.py`.
 
-Tune thresholds in `app/detection.py`.
+## Incident Severity
 
-## 7. Switching to PostgreSQL later
+The correlation engine assigns an overall incident severity from the
+alert types it grouped together:
+
+| Severity | Condition |
+|---|---|
+| **Critical** | Sensitive resource access combined with privilege escalation or a compromised login |
+| **High** | Brute-force activity, successful login after failures, or privilege escalation alone |
+| **Medium** | Unusual login time, or repeated (but sub-threshold) failures |
+| **Low** | Minor authentication anomalies |
+
+See `app/severity.py` for the exact rules and recommended-actions mapping.
+
+## API Reference
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/logs/ingest/raw` | Ingest raw syslog-style text lines |
+| POST | `/logs/ingest/structured` | Ingest already-structured JSON log events |
+| GET | `/logs/` | List stored logs (filter by user/IP) |
+| GET | `/alerts/` | List alerts (filter by severity) |
+| GET | `/incidents/` | List incidents (filter by severity/status) |
+| GET | `/incidents/{id}` | Incident detail: evidence, timeline, alerts |
+| GET | `/incidents/{id}/report.pdf` | Download the PDF incident report |
+| PATCH | `/incidents/{id}/status` | Update incident status (OPEN/IN_PROGRESS/CLOSED) |
+| GET | `/dashboard/summary` | Severity counts, top IPs/accounts, active incidents |
+| POST | `/simulate` | Load the example attack scenario |
+
+Full interactive schema at `/docs` (Swagger UI) or `/redoc`.
+
+## Feeding It Real Logs
+
+`POST /logs/ingest/raw` accepts raw syslog-style lines, e.g. pasted from
+`/var/log/auth.log`:
+
+```json
+{
+  "lines": [
+    "Sep 27 10:31:02 server sshd: Failed password for admin from 192.168.1.25"
+  ],
+  "service": "SSH"
+}
+```
+
+It currently understands SSH failed/accepted logins, `sudo` privilege
+escalation, and a generic "accessed &lt;sensitive-path&gt;" pattern. Add more
+patterns in `app/normalizer.py` — that's the single place that knows about
+source-specific log formats, so adding a new source doesn't touch the rest
+of the pipeline.
+
+For sources that can emit structured data directly, use
+`POST /logs/ingest/structured` instead (see `LogEventIn` in
+`app/schemas.py`).
+
+## Switching to PostgreSQL
 
 ```bash
 export SOC_DATABASE_URL="postgresql://user:password@localhost:5432/soc_insight"
@@ -107,11 +277,30 @@ pip install psycopg2-binary
 
 No other code changes needed — everything goes through SQLAlchemy's ORM.
 
-## 8. What's next (not built yet)
+## Roadmap
 
-- React dashboard (the proposal's Module 6) — this backend's `/dashboard/summary`,
-  `/incidents/`, and `/incidents/{id}` endpoints are designed to feed it directly.
-- Real log source connectors (Windows Event Log, firewall, cloud logs).
-- Threat-intelligence IP lookups, ML anomaly scoring, MITRE ATT&CK mapping
-  (Advanced Features in the proposal) — these are optional add-ons layered
-  on top of `detection.py`/`correlation.py`, not rewrites.
+- Real log source connectors (Windows Event Log, firewall, cloud logs)
+- Threat-intelligence IP reputation lookups
+- Machine-learning anomaly detection as an additional signal
+- MITRE ATT&CK technique mapping per incident
+- Attack-chain relationship graph visualization
+- Real-time log streaming
+- Email/Slack notifications for critical incidents
+- SOAR-style automated response workflows
+
+## Limitations
+
+This is an investigation and incident-response **assistance** platform, not
+a replacement for an enterprise SIEM/SOC:
+
+- Detection rules may produce false positives and are tuned for the
+  scenarios in this project, not a specific production environment
+- No built-in threat-intelligence feed (the hook for one exists in the
+  architecture, but no data source is wired up)
+- No real-time streaming ingestion yet — logs are ingested via API calls
+- Correlation is username/IP-based; it won't catch attacks that deliberately
+  avoid reusing either
+
+## License
+
+MIT — see `LICENSE`.
