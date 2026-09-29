@@ -20,6 +20,14 @@ inspecting timelines, and downloading reports.
 ![React](https://img.shields.io/badge/React-18-61DAFB)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
+**🔗 Live Demo:** https://soc-insight-krf3.vercel.app
+**🔗 API / Docs:** https://soc-insight.onrender.com/docs
+
+> The backend runs on Render's free tier, which spins down after 15 minutes
+> of inactivity. If the demo looks stuck loading, give it 30–50 seconds to
+> wake back up, then click **Run Simulation** on the dashboard to see it
+> populate with a sample incident.
+
 ---
 
 ## Table of Contents
@@ -32,6 +40,7 @@ inspecting timelines, and downloading reports.
 - [Getting Started](#getting-started)
   - [Backend](#1-backend-setup)
   - [Frontend](#2-frontend-setup)
+- [Deployment](#deployment)
 - [Try It: Sample Attack Scenario](#try-it-sample-attack-scenario)
 - [Detection Rules](#detection-rules)
 - [Incident Severity](#incident-severity)
@@ -184,21 +193,49 @@ elsewhere, create `frontend/.env`:
 VITE_API_URL=http://your-backend-host:8000
 ```
 
+## Deployment
+
+This project is deployed as two separate services:
+
+| Service | Platform | Notes |
+|---|---|---|
+| Backend (FastAPI) | [Render](https://render.com) | Free web service. Build: `pip install -r requirements.txt`. Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Frontend (React/Vite) | [Vercel](https://vercel.com) | Root directory: `frontend`. Env var: `VITE_API_URL` set to the Render backend's URL |
+
+To deploy your own copy:
+
+1. Push this repo to GitHub.
+2. On Render: New → Web Service → connect the repo → use the build/start
+   commands above → deploy. Copy the resulting URL.
+3. On Vercel: Add New → Project → import the repo → set **Root Directory**
+   to `frontend` → add environment variable `VITE_API_URL` set to the
+   Render URL from step 2 → deploy.
+
+**Note:** Render's free tier uses ephemeral disk, so the SQLite database
+resets on every redeploy or restart after inactivity. For persistent data,
+switch to Render's managed PostgreSQL (see [Switching to PostgreSQL](#switching-to-postgresql) below) — no application code changes needed beyond the connection string.
+
 ## Try It: Sample Attack Scenario
 
 No real log source needed to see the whole pipeline work — `/simulate`
 replays a scripted attack (brute force → successful login → privilege
-escalation → sensitive file access) plus some harmless background traffic:
+escalation → sensitive file access) plus some harmless background traffic.
+
+**On the live demo:** open https://soc-insight-krf3.vercel.app and click
+**Run Simulation** in the top right.
+
+**Locally, or via the API directly:**
 
 ```bash
-curl -X POST http://127.0.0.1:8000/simulate
-curl http://127.0.0.1:8000/incidents/
-curl http://127.0.0.1:8000/incidents/1/report.pdf -o incident_1.pdf
+curl -X POST https://soc-insight.onrender.com/simulate
+curl https://soc-insight.onrender.com/incidents/
+curl https://soc-insight.onrender.com/incidents/1/report.pdf -o incident_1.pdf
 ```
 
-Or click **Run Simulation** in the dashboard. Expect one `CRITICAL`
-`ACCOUNT_COMPROMISE` incident with a full timeline from the first failed
-login through the sensitive file access.
+(Swap the host for `http://127.0.0.1:8000` when running locally.)
+
+Expect one `CRITICAL` `ACCOUNT_COMPROMISE` incident with a full timeline
+from the first failed login through the sensitive file access.
 
 ## Detection Rules
 
@@ -304,3 +341,4 @@ a replacement for an enterprise SIEM/SOC:
 ## License
 
 MIT — see `LICENSE`.
+
