@@ -21,7 +21,9 @@ export default function AlertsTimelineChart({ alerts }) {
     if (!alerts || alerts.length === 0) {
       return { buckets: [], maxCount: 0 };
     }
-    const times = alerts.map((a) => new Date(a.created_at).getTime());
+    const times = alerts.map((a) =>
+      new Date(a.occurred_at || a.created_at).getTime()
+    );
     const min = Math.min(...times);
     const max = Math.max(...times);
     const span = Math.max(max - min, 1);
@@ -33,7 +35,7 @@ export default function AlertsTimelineChart({ alerts }) {
     }));
 
     alerts.forEach((a) => {
-      const t = new Date(a.created_at).getTime();
+      const t = new Date(a.occurred_at || a.created_at).getTime();
       let idx = Math.floor((t - min) / bucketMs);
       if (idx >= BUCKET_COUNT) idx = BUCKET_COUNT - 1;
       if (idx < 0) idx = 0;

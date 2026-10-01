@@ -72,15 +72,22 @@ def ingest_normalized_events(db: Session, normalized_events: List[Dict[str, Any]
         f for f in findings if new_ids.intersection(f.get("evidence_log_ids", []))
     ]
 
+    timestamp_by_log_id = {e.id: e.timestamp for e in recent_events}
+
     alerts = []
     for f in new_findings:
+        evidence_ids = f.get("evidence_log_ids", [])
+        evidence_times = [
+            timestamp_by_log_id[i] for i in evidence_ids if i in timestamp_by_log_id
+        ]
         alert = Alert(
             alert_type=f["alert_type"],
             severity=f["severity"],
             username=f.get("username"),
             source_ip=f.get("source_ip"),
             description=f["description"],
-            evidence_log_ids=f.get("evidence_log_ids", []),
+            evidence_log_ids=evidence_ids,
+            occurred_at=min(evidence_times) if evidence_times else None,
         )
         db.add(alert)
         alerts.append(alert)

@@ -65,6 +65,40 @@ def test_streaming_attack_extends_same_incident_not_duplicate(db):
     assert incidents_after_batch2[0].severity == "CRITICAL"
 
 
+def test_alert_occurred_at_reflects_event_time_not_insert_time(db):
+    """Alerts must carry the timestamp of when the underlying event(s)
+    actually happened (occurred_at), not when the row was inserted
+    (created_at) - otherwise every alert from one ingest looks like it
+    happened at the same instant, which breaks any time-based view (e.g.
+    the dashboard's alerts-over-time chart). Note: syslog lines carry no
+    year field, so the normalizer reconstructs the current year regardless
+    of the generator's base_time year - this test checks month/day/hour/
+    minute/second, which the generator does control, rather than the year."""
+    base = datetime(2026, 6, 15, 14, 0, 0)
+    lines = generate_attack_scenario(base)
+    logs, alerts, _ = ingest_normalized_events(db, normalize_lines(lines))
+
+    assert len(alerts) > 0
+    logs_by_id = {l.id: l for l in logs}
+
+    for a in alerts:
+        assert a.occurred_at is not None
+        # occurred_at must exactly match the earliest evidence log's own
+        # timestamp - not "now" (when this test actually runs)
+        evidence_times = [
+            logs_by_id[i].timestamp for i in a.evidence_log_ids if i in logs_by_id
+        ]
+        assert a.occurred_at == min(evidence_times)
+        # and it should match the generator's scripted date, confirming
+        # it's not drifting to real insert time
+        assert a.occurred_at.month == 6 and a.occurred_at.day == 15
+
+    # alerts for different stages of the attack should have different
+    # occurred_at times, spread across the scenario - not identical
+    occurred_times = {a.occurred_at for a in alerts}
+    assert len(occurred_times) > 1
+
+
 def test_alert_count_matches_findings_not_duplicated(db):
     base = datetime(2026, 1, 1, 14, 0, 0)  # pinned to business hours - deterministic
     lines = generate_attack_scenario(base)

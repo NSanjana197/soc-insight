@@ -46,6 +46,7 @@ class AlertOut(BaseModel):
     source_ip: Optional[str]
     description: str
     evidence_log_ids: List[int]
+    occurred_at: Optional[datetime] = None
     created_at: datetime
     incident_id: Optional[int]
     mitre_technique: Optional[MitreTechnique] = None

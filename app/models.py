@@ -45,7 +45,14 @@ class Alert(Base):
     source_ip = Column(String, nullable=True, index=True)
     description = Column(Text, nullable=False)
     evidence_log_ids = Column(JSON, default=list)      # list[int] of LogEvent ids
-    created_at = Column(DateTime, default=utcnow)
+    occurred_at = Column(DateTime, nullable=True)       # when the underlying log
+    # event(s) actually happened, per their own timestamps - NOT when this row
+    # was inserted. Ingesting a batch of historical logs all at once (as
+    # /simulate does) would otherwise make every alert look like it happened
+    # at the same instant, which is wrong for any time-based view.
+    created_at = Column(DateTime, default=utcnow)       # when this alert was
+    # detected/recorded by the system (DB insert time) - kept for audit
+    # purposes, but not what a timeline chart should bucket by.
     incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=True)
 
     incident = relationship("Incident", back_populates="alerts")

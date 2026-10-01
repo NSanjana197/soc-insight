@@ -46,7 +46,8 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
             "id": a.id, "alert_type": a.alert_type, "severity": a.severity,
             "username": a.username, "source_ip": a.source_ip,
             "description": a.description, "evidence_log_ids": a.evidence_log_ids,
-            "created_at": a.created_at, "incident_id": a.incident_id,
+            "occurred_at": a.occurred_at, "created_at": a.created_at,
+            "incident_id": a.incident_id,
             "mitre_technique": technique,
         })
         if technique:
