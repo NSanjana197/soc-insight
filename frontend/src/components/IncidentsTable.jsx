@@ -28,42 +28,44 @@ export default function IncidentsTable({ incidents, selectedId, onSelect }) {
           ingest logs via the API, to see one appear here.
         </div>
       ) : (
-        <table className="incidents-table">
-          <thead>
-            <tr>
-              <th>Incident</th>
-              <th>Type</th>
-              <th>Severity</th>
-              <th>Account</th>
-              <th>Source IP</th>
-              <th>Detected</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {incidents.map((inc) => (
-              <tr
-                key={inc.id}
-                className={inc.id === selectedId ? "selected" : ""}
-                onClick={() => onSelect(inc.id)}
-              >
-                <td className="td-code">{inc.incident_code}</td>
-                <td>{inc.incident_type.replaceAll("_", " ")}</td>
-                <td>
-                  <SeverityBadge severity={inc.severity} />
-                </td>
-                <td className="mono">{inc.affected_account || "-"}</td>
-                <td className="mono">{inc.source_ip || "-"}</td>
-                <td className="td-muted">{formatTime(inc.detection_time)}</td>
-                <td>
-                  <span className={`badge status ${inc.status.toLowerCase()}`}>
-                    {inc.status}
-                  </span>
-                </td>
+        <div className="table-scroll">
+          <table className="incidents-table">
+            <thead>
+              <tr>
+                <th>Incident</th>
+                <th>Type</th>
+                <th>Severity</th>
+                <th>Account</th>
+                <th>Source IP</th>
+                <th>Detected</th>
+                <th>Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {incidents.map((inc) => (
+                <tr
+                  key={inc.id}
+                  className={inc.id === selectedId ? "selected" : ""}
+                  onClick={() => onSelect(inc.id)}
+                >
+                  <td className="td-code">{inc.incident_code}</td>
+                  <td>{inc.incident_type.replaceAll("_", " ")}</td>
+                  <td>
+                    <SeverityBadge severity={inc.severity} />
+                  </td>
+                  <td className="mono">{inc.affected_account || "-"}</td>
+                  <td className="mono">{inc.source_ip || "-"}</td>
+                  <td className="td-muted">{formatTime(inc.detection_time)}</td>
+                  <td>
+                    <span className={`badge status ${inc.status.toLowerCase()}`}>
+                      {inc.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

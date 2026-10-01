@@ -9,182 +9,71 @@ it arrives".
 """
 
 from typing import List, Dict, Any
-from datetime import timedelta
-
 from sqlalchemy.orm import Session
 
 from app.models import LogEvent, Alert
 from app.detection import run_all_detectors
-from app.correlation import correlate_findings
+from app.correlation import correlate_alerts
 
 
-CORRELATION_WINDOW_MINUTES = 20
-
-
-def _finding_is_duplicate_alert(
-    db: Session,
-    finding: Dict[str, Any],
-) -> bool:
-    """
-    Check whether this detection finding already exists as an alert.
-
-    A new simulation creates new LogEvent IDs, so comparing only
-    evidence_log_ids is not enough.
-
-    Instead, compare:
-        - alert type
-        - username
-        - source IP
-        - evidence timestamps
-
-    If the same type of detection for the same account/IP occurs
-    within the correlation window of an existing alert, treat it
-    as the same alert and do not create another one.
-    """
-
-    alert_type = finding.get("alert_type")
-    username = finding.get("username")
-    source_ip = finding.get("source_ip")
-
-    evidence_log_ids = finding.get("evidence_log_ids", [])
-
-    if not evidence_log_ids:
-        return False
-
-    # Get timestamps of the new finding's evidence logs.
-    new_logs = (
-        db.query(LogEvent)
-        .filter(LogEvent.id.in_(evidence_log_ids))
-        .all()
-    )
-
-    if not new_logs:
-        return False
-
-    new_timestamps = [
-        log.timestamp
-        for log in new_logs
-        if log.timestamp is not None
-    ]
-
-    if not new_timestamps:
-        return False
-
-    new_start = min(new_timestamps)
-    new_end = max(new_timestamps)
-
-    # Look only at alerts with the same detection characteristics.
-    existing_alerts = (
-        db.query(Alert)
+def _already_stored(db: Session, ev: Dict[str, Any]) -> bool:
+    """Exact duplicate of a stored event (same time, user, IP, type, raw
+    line). Makes re-ingesting the same file or lines harmless."""
+    return (
+        db.query(LogEvent.id)
         .filter(
-            Alert.alert_type == alert_type,
-            Alert.username == username,
-            Alert.source_ip == source_ip,
+            LogEvent.timestamp == ev["timestamp"],
+            LogEvent.username == ev.get("username"),
+            LogEvent.source_ip == ev.get("source_ip"),
+            LogEvent.event_type == ev["event_type"],
+            LogEvent.raw_log == ev.get("raw_log"),
         )
-        .all()
+        .first()
+        is not None
     )
 
-    for existing_alert in existing_alerts:
 
-        existing_log_ids = existing_alert.evidence_log_ids or []
-
-        if not existing_log_ids:
-            continue
-
-        existing_logs = (
-            db.query(LogEvent)
-            .filter(LogEvent.id.in_(existing_log_ids))
-            .all()
-        )
-
-        existing_timestamps = [
-            log.timestamp
-            for log in existing_logs
-            if log.timestamp is not None
-        ]
-
-        if not existing_timestamps:
-            continue
-
-        existing_start = min(existing_timestamps)
-        existing_end = max(existing_timestamps)
-
-        # Expand both time ranges by the correlation window.
-        window = timedelta(minutes=CORRELATION_WINDOW_MINUTES)
-
-        existing_start -= window
-        existing_end += window
-
-        # Check whether the two evidence ranges overlap.
-        if (
-            new_start <= existing_end
-            and new_end >= existing_start
-        ):
-            return True
-
-    return False
-
-
-def ingest_normalized_events(
-    db: Session,
-    normalized_events: List[Dict[str, Any]]
-):
-    """
-    Store normalized events, run detection + correlation, persist
-    alerts and any resulting incidents.
-
-    Returns:
-        (stored_logs, alerts, incidents)
-    """
+def ingest_normalized_events(db: Session, normalized_events: List[Dict[str, Any]]):
+    """Store new events, run detection + correlation, persist alerts and
+    incidents. Returns (stored_logs, alerts, incidents), all NEW from this
+    call only."""
 
     stored_logs = []
-
-    # ---------------------------------------------------------
-    # STORE LOGS
-    # ---------------------------------------------------------
-
     for ev in normalized_events:
+        if _already_stored(db, ev):
+            continue
         log = LogEvent(**ev)
         db.add(log)
+        db.flush()  # so the next duplicate check sees it too
         stored_logs.append(log)
 
-    # Assign IDs before detectors reference them.
-    db.flush()
+    if not stored_logs:
+        db.commit()
+        return [], [], []
 
-    # ---------------------------------------------------------
-    # DETECTION
-    # ---------------------------------------------------------
+    new_ids = {l.id for l in stored_logs}
 
+    # Detectors look at recent history so patterns that span ingests (e.g.
+    # failures in one batch, the success in the next) are still caught.
+    # Prototype scope: last 500 events; production would use a time window.
     recent_events = (
         db.query(LogEvent)
         .order_by(LogEvent.timestamp.desc())
         .limit(500)
         .all()
     )
-
     recent_events.sort(key=lambda e: e.timestamp)
 
     findings = run_all_detectors(db, recent_events)
 
-    # ---------------------------------------------------------
-    # CORRELATION
-    # ---------------------------------------------------------
-
-    incidents = correlate_findings(db, findings)
-
-    # ---------------------------------------------------------
-    # ALERT CREATION WITH DUPLICATE PROTECTION
-    # ---------------------------------------------------------
+    # Only findings that involve at least one newly arrived log are new.
+    # Everything else was already reported by an earlier ingest.
+    new_findings = [
+        f for f in findings if new_ids.intersection(f.get("evidence_log_ids", []))
+    ]
 
     alerts = []
-
-    for f in findings:
-
-        # Do not create another alert if this finding already
-        # represents an existing alert.
-        if _finding_is_duplicate_alert(db, f):
-            continue
-
+    for f in new_findings:
         alert = Alert(
             alert_type=f["alert_type"],
             severity=f["severity"],
@@ -193,37 +82,17 @@ def ingest_normalized_events(
             description=f["description"],
             evidence_log_ids=f.get("evidence_log_ids", []),
         )
-
-        # Link the alert to an incident if its evidence belongs
-        # to one of the newly created incidents.
-        for incident in incidents:
-
-            incident_log_ids = {
-                te.log_event_id
-                for te in incident.timeline_events
-            }
-
-            if incident_log_ids.intersection(
-                alert.evidence_log_ids
-            ):
-                alert.incident_id = incident.id
-                break
-
         db.add(alert)
         alerts.append(alert)
+    db.flush()  # assign alert ids before correlation
 
-    # ---------------------------------------------------------
-    # SAVE
-    # ---------------------------------------------------------
+    incidents = correlate_alerts(db, alerts)
 
     db.commit()
-
     for log in stored_logs:
         db.refresh(log)
-
     for alert in alerts:
         db.refresh(alert)
-
     for incident in incidents:
         db.refresh(incident)
 

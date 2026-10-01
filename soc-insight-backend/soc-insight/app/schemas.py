@@ -31,13 +31,6 @@ class LogEventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class MitreTechnique(BaseModel):
-    id: str
-    name: str
-    tactic: str
-    url: str
-
-
 class AlertOut(BaseModel):
     id: int
     alert_type: str
@@ -48,7 +41,6 @@ class AlertOut(BaseModel):
     evidence_log_ids: List[int]
     created_at: datetime
     incident_id: Optional[int]
-    mitre_technique: Optional[MitreTechnique] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -79,7 +71,6 @@ class IncidentOut(BaseModel):
 class IncidentDetailOut(IncidentOut):
     timeline: List[TimelineEventOut]
     alerts: List[AlertOut]
-    mitre_techniques: List[MitreTechnique] = []
 
 
 class DashboardSummary(BaseModel):

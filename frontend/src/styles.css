@@ -229,6 +229,20 @@ button {
   font-size: 22px;
 }
 
+/* ---------- Alerts timeline chart ---------- */
+
+.chart-wrap {
+  padding: 16px 18px 14px;
+}
+
+.chart-wrap svg rect {
+  transition: opacity 0.15s ease;
+}
+
+.chart-wrap svg rect:hover {
+  opacity: 1 !important;
+}
+
 /* ---------- Two column body ---------- */
 
 .body-grid {
@@ -245,6 +259,42 @@ button {
   .severity-strip {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+@media (max-width: 520px) {
+  .main {
+    padding: 16px 14px 32px;
+    gap: 16px;
+  }
+  .header {
+    padding: 14px 16px;
+  }
+  .severity-strip {
+    grid-template-columns: 1fr;
+  }
+  .severity-tile.totals {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .header-actions .btn span,
+  .header-actions .btn-primary span {
+    display: none;
+  }
+  .detail-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Incidents table scrolls horizontally on narrow screens instead of
+   squeezing columns or overflowing the page */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll .incidents-table {
+  min-width: 720px;
 }
 
 /* ---------- Panels ---------- */
@@ -583,6 +633,39 @@ button {
   width: 5px;
   height: 5px;
   background: var(--accent);
+}
+
+.mitre-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mitre-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-raised);
+  text-decoration: none;
+  color: var(--text);
+  font-size: 12px;
+  transition: border-color 0.15s ease;
+}
+
+.mitre-tag:hover {
+  border-color: var(--accent);
+}
+
+.mitre-tag-id {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.mitre-tag-name {
+  color: var(--text-muted);
 }
 
 .timeline {

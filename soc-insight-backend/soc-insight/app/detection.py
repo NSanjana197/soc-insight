@@ -210,40 +210,6 @@ def detect_sensitive_access(events: List[LogEvent]) -> List[Dict[str, Any]]:
     return findings
 
 
-def detect_new_source_ip(events: List[LogEvent]) -> List[Dict[str, Any]]:
-    """A successful login for a user from an IP not seen for that user
-    earlier in this event window, when the user has an established prior
-    IP. On its own this is a minor anomaly (could just be travel or a new
-    device) - LOW severity - but it's exactly the kind of signal that
-    becomes meaningful when it co-occurs with other findings, which the
-    correlation engine will pick up on."""
-    findings = []
-    by_user = defaultdict(list)
-    for e in events:
-        if e.username:
-            by_user[e.username].append(e)
-
-    for user, group in by_user.items():
-        group.sort(key=lambda e: e.timestamp)
-        seen_ips = set()
-        for e in group:
-            if e.event_type in ("LOGIN_SUCCESS", "LOGIN_FAILED") and e.source_ip:
-                if seen_ips and e.source_ip not in seen_ips and e.event_type == "LOGIN_SUCCESS":
-                    findings.append({
-                        "alert_type": "NEW_SOURCE_IP",
-                        "severity": "LOW",
-                        "username": user,
-                        "source_ip": e.source_ip,
-                        "description": (
-                            f"Login for '{user}' from a source IP ({e.source_ip}) "
-                            f"not previously seen for this account."
-                        ),
-                        "evidence_log_ids": [e.id],
-                    })
-                seen_ips.add(e.source_ip)
-    return findings
-
-
 ALL_DETECTORS = [
     detect_brute_force,
     detect_repeated_failures,
@@ -251,7 +217,6 @@ ALL_DETECTORS = [
     detect_unusual_login_time,
     detect_privilege_escalation,
     detect_sensitive_access,
-    detect_new_source_ip,
 ]
 
 

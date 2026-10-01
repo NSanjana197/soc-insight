@@ -91,6 +91,27 @@ export default function IncidentDetail({ incident, onClose, onStatusChange }) {
             </div>
           </div>
 
+          {incident.mitre_techniques && incident.mitre_techniques.length > 0 && (
+            <div>
+              <h4 className="detail-section-title">MITRE ATT&amp;CK Techniques</h4>
+              <div className="mitre-tags">
+                {incident.mitre_techniques.map((t) => (
+                  <a
+                    key={t.id}
+                    className="mitre-tag"
+                    href={t.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={t.tactic}
+                  >
+                    <span className="mitre-tag-id">{t.id}</span>
+                    <span className="mitre-tag-name">{t.name}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <h4 className="detail-section-title">Evidence</h4>
             <ul className="evidence-list">

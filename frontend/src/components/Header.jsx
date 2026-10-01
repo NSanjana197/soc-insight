@@ -14,11 +14,11 @@ export default function Header({ isOnline, onRefresh, onSimulate, loading }) {
         </span>
         <button className="btn" onClick={onRefresh} disabled={loading}>
           <RefreshCw size={14} />
-          Refresh
+          <span>Refresh</span>
         </button>
         <button className="btn btn-primary" onClick={onSimulate} disabled={loading}>
           <Zap size={14} />
-          Run Simulation
+          <span>Run Simulation</span>
         </button>
       </div>
     </header>

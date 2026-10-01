@@ -50,11 +50,6 @@ class Alert(Base):
 
     incident = relationship("Incident", back_populates="alerts")
 
-    @property
-    def mitre_technique(self):
-        from app.mitre import get_technique
-        return get_technique(self.alert_type)
-
 
 class Incident(Base):
     __tablename__ = "incidents"

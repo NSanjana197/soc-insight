@@ -4,11 +4,13 @@ import SeverityStrip from "./components/SeverityStrip.jsx";
 import IncidentsTable from "./components/IncidentsTable.jsx";
 import RankedList from "./components/RankedList.jsx";
 import IncidentDetail from "./components/IncidentDetail.jsx";
+import AlertsTimelineChart from "./components/AlertsTimelineChart.jsx";
 import { api } from "./api.js";
 
 export default function App() {
   const [summary, setSummary] = useState(null);
   const [incidents, setIncidents] = useState([]);
+  const [alerts, setAlerts] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -17,12 +19,14 @@ export default function App() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [summaryData, incidentsData] = await Promise.all([
+      const [summaryData, incidentsData, alertsData] = await Promise.all([
         api.getDashboardSummary(),
         api.getIncidents(),
+        api.getAlerts(),
       ]);
       setSummary(summaryData);
       setIncidents(incidentsData);
+      setAlerts(alertsData);
       setIsOnline(true);
       setError(null);
     } catch (err) {
@@ -85,6 +89,8 @@ export default function App() {
         )}
 
         <SeverityStrip summary={summary} />
+
+        <AlertsTimelineChart alerts={alerts} />
 
         <div className="body-grid">
           <IncidentsTable

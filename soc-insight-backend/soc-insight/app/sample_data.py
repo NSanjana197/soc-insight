@@ -9,19 +9,9 @@ without needing a real log source connected yet.
 from datetime import datetime, timedelta
 
 
-def _default_base_time() -> datetime:
-    """Anchors demo scenarios to a fixed, mid-afternoon time of day rather
-    than the real wall-clock time. Without this, running /simulate at,
-    say, 4 AM would make every background login look like an 'unusual
-    login time' finding - the demo would look noisy/broken purely because
-    of what time of day someone clicked the button, which has nothing to
-    do with the detection logic actually working correctly."""
-    return datetime.now().replace(hour=14, minute=0, second=0, microsecond=0)
-
-
 def generate_attack_scenario(base_time: datetime = None) -> list[str]:
     if base_time is None:
-        base_time = _default_base_time()
+        base_time = datetime.now().replace(microsecond=0)
 
     lines = []
     t = base_time
@@ -61,7 +51,7 @@ def generate_background_noise(base_time: datetime = None, count: int = 5) -> lis
     """A handful of normal, low-signal logins from other users, so the
     dashboard/demo doesn't look completely empty of 'everyday' traffic."""
     if base_time is None:
-        base_time = _default_base_time()
+        base_time = datetime.now().replace(microsecond=0)
 
     users = ["jsmith", "priya", "dnguyen", "okafor", "lrossi"]
     ips = ["10.0.0.14", "10.0.0.22", "10.0.0.31", "10.0.0.9", "10.0.0.44"]
@@ -74,33 +64,3 @@ def generate_background_noise(base_time: datetime = None, count: int = 5) -> lis
         )
         t += timedelta(minutes=7)
     return lines
-
-
-def generate_unusual_hour_login(base_time: datetime = None) -> list[str]:
-    """A single successful login at 3 AM for an otherwise normal user -
-    triggers UNUSUAL_LOGIN_TIME (MEDIUM) on its own, without a full attack
-    chain around it. Fills out the Medium severity tile for demo purposes."""
-    if base_time is None:
-        base_time = _default_base_time()
-    t = base_time.replace(hour=3, minute=12, second=0)
-    return [
-        f"{t.strftime('%b %d %H:%M:%S')} server sshd: "
-        f"Accepted password for dnguyen from 203.0.113.44"
-    ]
-
-
-def generate_new_ip_login(base_time: datetime = None) -> list[str]:
-    """Two successful logins for the same user from two different IPs -
-    triggers NEW_SOURCE_IP (LOW) on the second one. On its own this is a
-    minor anomaly; it only becomes interesting if it later co-occurs with
-    other findings for the same account."""
-    if base_time is None:
-        base_time = _default_base_time()
-    t1 = base_time - timedelta(hours=5)
-    t2 = base_time - timedelta(hours=1)
-    return [
-        f"{t1.strftime('%b %d %H:%M:%S')} server sshd: "
-        f"Accepted password for lrossi from 10.0.0.44",
-        f"{t2.strftime('%b %d %H:%M:%S')} server sshd: "
-        f"Accepted password for lrossi from 198.51.100.7",
-    ]

@@ -25,9 +25,6 @@ def list_incidents(
     return query.order_by(Incident.created_at.desc()).all()
 
 
-from app.mitre import get_technique
-
-
 @router.get("/{incident_id}", response_model=IncidentDetailOut)
 def get_incident(incident_id: int, db: Session = Depends(get_db)):
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
@@ -38,21 +35,15 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
         {"timestamp": te.timestamp, "description": te.description}
         for te in incident.timeline_events
     ]
-    alerts_out = []
-    techniques_by_id = {}
-    for a in incident.alerts:
-        technique = get_technique(a.alert_type)
-        alerts_out.append({
+    data["alerts"] = [
+        {
             "id": a.id, "alert_type": a.alert_type, "severity": a.severity,
             "username": a.username, "source_ip": a.source_ip,
             "description": a.description, "evidence_log_ids": a.evidence_log_ids,
             "created_at": a.created_at, "incident_id": a.incident_id,
-            "mitre_technique": technique,
-        })
-        if technique:
-            techniques_by_id[technique["id"]] = technique
-    data["alerts"] = alerts_out
-    data["mitre_techniques"] = list(techniques_by_id.values())
+        }
+        for a in incident.alerts
+    ]
     return data
 
 

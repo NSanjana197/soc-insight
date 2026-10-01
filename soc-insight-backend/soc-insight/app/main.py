@@ -1,4 +1,3 @@
-from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -7,20 +6,8 @@ from app.database import init_db, get_db
 from app.routers import logs, alerts, incidents, dashboard
 from app.normalizer import normalize_lines
 from app.pipeline import ingest_normalized_events
-from app.sample_data import (
-    generate_attack_scenario,
-    generate_background_noise,
-    generate_unusual_hour_login,
-    generate_new_ip_login,
-)
+from app.sample_data import generate_attack_scenario, generate_background_noise
 from app.schemas import IngestResult
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_db()
-    yield
-
 
 app = FastAPI(
     title="SOC-Insight",
@@ -31,7 +18,6 @@ app = FastAPI(
         "incident reports."
     ),
     version="0.1.0",
-    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -45,6 +31,11 @@ app.include_router(logs.router)
 app.include_router(alerts.router)
 app.include_router(incidents.router)
 app.include_router(dashboard.router)
+
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
 
 
 @app.get("/")
@@ -61,17 +52,10 @@ def root():
 def simulate_attack(db: Session = Depends(get_db)):
     """Loads the example attack scenario from the project proposal
     (brute force -> successful login -> sudo -> sensitive file access)
-    plus background traffic and a couple of standalone lower-severity
-    findings (an unusual-hour login, a login from a new source IP), so a
-    single simulation run demonstrates the full severity range rather
-    than only CRITICAL. Use this to see the whole system work without
-    needing a real log source connected."""
-    lines = (
-        generate_background_noise()
-        + generate_attack_scenario()
-        + generate_unusual_hour_login()
-        + generate_new_ip_login()
-    )
+    plus some harmless background logins, runs it through the full
+    pipeline, and returns what was detected. Use this to see the whole
+    system work without needing a real log source connected."""
+    lines = generate_background_noise() + generate_attack_scenario()
     normalized = normalize_lines(lines, service="SSH")
     logs_, alerts_, incidents_ = ingest_normalized_events(db, normalized)
     return IngestResult(
